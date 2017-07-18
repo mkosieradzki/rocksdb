@@ -333,9 +333,9 @@ Status BlobDBImpl::OpenPhase1() {
 
 void BlobDBImpl::StartBackgroundTasks() {
   // store a call to a member function and object
-  tqueue_.add(
-      bdb_options_.reclaim_of_period_millisecs,
-      std::bind(&BlobDBImpl::ReclaimOpenFiles, this, std::placeholders::_1));
+  // tqueue_.add(
+  //     bdb_options_.reclaim_of_period_millisecs,
+  //     std::bind(&BlobDBImpl::ReclaimOpenFiles, this, std::placeholders::_1));
   tqueue_.add(bdb_options_.gc_check_period_millisecs,
               std::bind(&BlobDBImpl::RunGC, this, std::placeholders::_1));
   tqueue_.add(
@@ -347,12 +347,12 @@ void BlobDBImpl::StartBackgroundTasks() {
   tqueue_.add(
       bdb_options_.delete_obsf_period_millisecs,
       std::bind(&BlobDBImpl::DeleteObsFiles, this, std::placeholders::_1));
-  tqueue_.add(bdb_options_.sanity_check_period_millisecs,
-              std::bind(&BlobDBImpl::SanityCheck, this, std::placeholders::_1));
-  tqueue_.add(bdb_options_.wa_stats_period_millisecs,
-              std::bind(&BlobDBImpl::WaStats, this, std::placeholders::_1));
-  tqueue_.add(bdb_options_.fsync_files_period_millisecs,
-              std::bind(&BlobDBImpl::FsyncFiles, this, std::placeholders::_1));
+  // tqueue_.add(bdb_options_.sanity_check_period_millisecs,
+  //             std::bind(&BlobDBImpl::SanityCheck, this, std::placeholders::_1));
+  // tqueue_.add(bdb_options_.wa_stats_period_millisecs,
+  //             std::bind(&BlobDBImpl::WaStats, this, std::placeholders::_1));
+  // tqueue_.add(bdb_options_.fsync_files_period_millisecs,
+  //             std::bind(&BlobDBImpl::FsyncFiles, this, std::placeholders::_1));
   tqueue_.add(
       bdb_options_.check_seqf_period_millisecs,
       std::bind(&BlobDBImpl::CheckSeqFiles, this, std::placeholders::_1));
@@ -1518,17 +1518,27 @@ bool BlobDBImpl::MarkBlobDeleted(const Slice& key, const Slice& lsmValue) {
 
 std::pair<bool, int64_t> BlobDBImpl::EvictCompacted(bool aborted) {
   if (aborted) return std::make_pair(false, -1);
+  ROCKS_LOG_INFO(db_options_.info_log, "Start evict compacted");
 
   override_packet_t packet;
+  size_t count = 0;
+  size_t ok_count = 0;
   while (override_vals_q_.dequeue(&packet)) {
-    FindFileAndEvictABlob(packet.file_number_, packet.key_size_,
-                          packet.blob_offset_, packet.blob_size_);
+    count++;
+    auto s = FindFileAndEvictABlob(packet.file_number_, packet.key_size_,
+                                   packet.blob_offset_, packet.blob_size_);
+    if (s) {
+      ok_count++;
+    }
   }
+  ROCKS_LOG_INFO(db_options_.info_log, "Finish evict compacted, count = %lu, ok = %lu",
+                 count, ok_count);
   return std::make_pair(true, -1);
 }
 
 std::pair<bool, int64_t> BlobDBImpl::EvictDeletions(bool aborted) {
   if (aborted) return std::make_pair(false, -1);
+  ROCKS_LOG_INFO(db_options_.info_log, "Start evict deletions");
 
   ColumnFamilyHandle* last_cfh = nullptr;
   Options last_op;
@@ -1540,7 +1550,9 @@ std::pair<bool, int64_t> BlobDBImpl::EvictDeletions(bool aborted) {
   // essentially we do not support Range Deletes now
   std::unique_ptr<RangeDelAggregator> range_del_agg;
   delete_packet_t dpacket;
+  size_t count = 0;
   while (delete_keys_q_.dequeue(&dpacket)) {
+    count++;
     if (last_cfh != dpacket.cfh_) {
       if (!range_del_agg) {
         auto cfhi = reinterpret_cast<ColumnFamilyHandleImpl*>(dpacket.cfh_);
@@ -1589,11 +1601,14 @@ std::pair<bool, int64_t> BlobDBImpl::EvictDeletions(bool aborted) {
       iter->Next();
     }
   }
+
+  ROCKS_LOG_INFO(db_options_.info_log, "Finish evict deletions, count = %lu", count);
   return std::make_pair(true, -1);
 }
 
 std::pair<bool, int64_t> BlobDBImpl::CheckSeqFiles(bool aborted) {
   if (aborted) return std::make_pair(false, -1);
+  ROCKS_LOG_INFO(db_options_.info_log, "Start CheckSeqFiles");
 
   std::vector<std::shared_ptr<BlobFile>> process_files;
   {
@@ -1606,6 +1621,8 @@ std::pair<bool, int64_t> BlobDBImpl::CheckSeqFiles(bool aborted) {
         ReadLock lockbfile_r(&bfile->mutex_);
 
         if (bfile->ttl_range_.second > epoch_now) continue;
+        ROCKS_LOG_INFO(db_options_.info_log, "Closing file %s",
+                       bfile->PathName().c_str());
         process_files.push_back(bfile);
       }
     }
@@ -1613,6 +1630,7 @@ std::pair<bool, int64_t> BlobDBImpl::CheckSeqFiles(bool aborted) {
 
   for (auto bfile : process_files) CloseSeqWrite(bfile, false);
 
+  ROCKS_LOG_INFO(db_options_.info_log, "Finish CheckSeqFiles");
   return std::make_pair(true, -1);
 }
 
@@ -1707,6 +1725,7 @@ std::pair<bool, int64_t> BlobDBImpl::WaStats(bool aborted) {
 ////////////////////////////////////////////////////////////////////////////////
 Status BlobDBImpl::GCFileAndUpdateLSM(const std::shared_ptr<BlobFile>& bfptr,
                                       GCStats* gcstats) {
+  ROCKS_LOG_INFO(db_options_.info_log, "GC file %s", bfptr->PathName().c_str());
   std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
   std::time_t tt = std::chrono::system_clock::to_time_t(now);
 
@@ -1741,6 +1760,15 @@ Status BlobDBImpl::GCFileAndUpdateLSM(const std::shared_ptr<BlobFile>& bfptr,
   assert(opt_db_);
 
   bool no_relocation_ttl = (has_ttl && tt > bfptr->GetTTLRange().second);
+  if (has_ttl) {
+    ROCKS_LOG_INFO(db_options_.info_log,
+                   "ttl blob file. Time range %lu %lu, no_relocation_ttl %d",
+                   bfptr->GetTTLRange().first, bfptr->GetTTLRange().second,
+                   no_relocation_ttl);
+  } else {
+    ROCKS_LOG_INFO(db_options_.info_log,
+                   "simple blob file.");
+  }
 
   bool no_relocation_lsmdel = false;
   {
@@ -1749,6 +1777,10 @@ Status BlobDBImpl::GCFileAndUpdateLSM(const std::shared_ptr<BlobFile>& bfptr,
                             (BlobLogHeader::kHeaderSize + bfptr->deleted_size_ +
                              BlobLogFooter::kFooterSize));
   }
+  ROCKS_LOG_INFO(db_options_.info_log,
+                 "file size %lu, deleted size %lu, no_relocation_lsmdel %d",
+                 bfptr->GetFileSize(), bfptr->deleted_size_,
+                 no_relocation_lsmdel);
 
   bool no_relocation = no_relocation_ttl || no_relocation_lsmdel;
   if (!no_relocation) {
@@ -1878,7 +1910,7 @@ Status BlobDBImpl::GCFileAndUpdateLSM(const std::shared_ptr<BlobFile>& bfptr,
   if (gcstats->newfile) total_blob_space_ += newfile->file_size_;
 
   ROCKS_LOG_INFO(db_options_.info_log,
-                 "File: %s Num deletes %" PRIu32 " Num relocs: %" PRIu32
+                 "GC File: %s Num deletes %" PRIu32 " Num relocs: %" PRIu32
                  " Succ Deletes: %" PRIu32 " Succ relocs: %" PRIu32,
                  bfptr->PathName().c_str(), gcstats->num_deletes,
                  gcstats->num_relocs, gcstats->succ_deletes_lsm,
@@ -1959,6 +1991,7 @@ bool BlobDBImpl::ShouldGCFile(std::shared_ptr<BlobFile> bfile, std::time_t tt,
 
 std::pair<bool, int64_t> BlobDBImpl::DeleteObsFiles(bool aborted) {
   if (aborted) return std::make_pair(false, -1);
+  ROCKS_LOG_INFO(db_options_.info_log, "Start delete obsoleted files");
 
   {
     ReadLock rl(&mutex_);
@@ -2009,6 +2042,7 @@ std::pair<bool, int64_t> BlobDBImpl::DeleteObsFiles(bool aborted) {
     for (auto bfile : tobsolete) obsolete_files_.push_front(bfile);
   }
 
+  ROCKS_LOG_INFO(db_options_.info_log, "Finish delete obsoleted files");
   return std::make_pair(!aborted, -1);
 }
 
@@ -2106,12 +2140,17 @@ void BlobDBImpl::FilterSubsetOfFiles(
   size_t files_processed = 0;
   for (auto bfile : blob_files) {
     if (files_processed >= files_to_collect) break;
+    ROCKS_LOG_INFO(db_options_.info_log,
+                   "Filtering file %s", bfile->PathName().c_str());
     // if this is the first time processing the file
     // i.e. gc_epoch == -1, process it.
     // else process the file if its processing epoch matches
     // the current epoch. Typically the #of epochs should be
     // around 5-10
     if (bfile->gc_epoch_ != -1 && (uint64_t)bfile->gc_epoch_ != epoch) {
+      ROCKS_LOG_INFO(db_options_.info_log,
+                     "Skipping for GC epoch. File epoch %lu, current epoch %lu\n",
+                     bfile->gc_epoch_.load(), epoch);
       continue;
     }
 
@@ -2121,15 +2160,22 @@ void BlobDBImpl::FilterSubsetOfFiles(
 
     // file has already been GC'd or is still open for append,
     // then it should not be GC'd
-    if (bfile->Obsolete() || !bfile->Immutable()) continue;
+    if (bfile->Obsolete() || !bfile->Immutable()) {
+      if (bfile->Obsolete()) {
+        ROCKS_LOG_INFO(db_options_.info_log, "File obsoleted");
+      } else {
+        ROCKS_LOG_INFO(db_options_.info_log, "File stil mutable");
+      }
+      continue;
+    }
 
     std::string reason;
     bool shouldgc = ShouldGCFile(bfile, tt, last_id, &reason);
     if (!shouldgc) {
-      ROCKS_LOG_DEBUG(db_options_.info_log,
-                      "File has been skipped for GC ttl %s %d %d reason='%s'",
-                      bfile->PathName().c_str(), tt,
-                      bfile->GetTTLRange().second, reason.c_str());
+      ROCKS_LOG_INFO(db_options_.info_log,
+                     "File has been skipped for GC ttl %s %d %d reason='%s'",
+                     bfile->PathName().c_str(), tt,
+                     bfile->GetTTLRange().second, reason.c_str());
       continue;
     }
 
@@ -2143,6 +2189,7 @@ void BlobDBImpl::FilterSubsetOfFiles(
 
 std::pair<bool, int64_t> BlobDBImpl::RunGC(bool aborted) {
   if (aborted) return std::make_pair(false, -1);
+  ROCKS_LOG_INFO(db_options_.info_log, "Start garbage collection.");
 
   current_epoch_++;
 
@@ -2187,6 +2234,7 @@ std::pair<bool, int64_t> BlobDBImpl::RunGC(bool aborted) {
     if (evict_cb) tq = std::make_shared<TimerQueue>();
 
     // if evict callback is present, first schedule the callback thread
+    ROCKS_LOG_INFO(db_options_.info_log, "Obsoleting %lu files", obsoletes.size());
     WriteLock wl(&mutex_);
     for (auto bfile : obsoletes) {
       bool last_file = (bfile == obsoletes.back());
@@ -2194,9 +2242,11 @@ std::pair<bool, int64_t> BlobDBImpl::RunGC(bool aborted) {
       blob_files_.erase(bfile->BlobFileNumber());
 
       if (!evict_cb) {
+        ROCKS_LOG_INFO(db_options_.info_log, "no evict callback");
         bfile->SetCanBeDeleted();
         obsolete_files_.push_front(bfile);
       } else {
+        ROCKS_LOG_INFO(db_options_.info_log, "adding evict callback");
         tq->add(0, std::bind(&BlobDBImpl::CallbackEvicts, this,
                              (last_file) ? tq.get() : nullptr, bfile,
                              std::placeholders::_1));
@@ -2206,6 +2256,7 @@ std::pair<bool, int64_t> BlobDBImpl::RunGC(bool aborted) {
   }
 
   // reschedule
+  ROCKS_LOG_INFO(db_options_.info_log, "Finish garbage collection.");
   return std::make_pair(true, -1);
 }
 

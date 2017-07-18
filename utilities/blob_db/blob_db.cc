@@ -162,7 +162,7 @@ BlobDBOptions::BlobDBOptions()
       min_blob_size(512),
       bytes_per_sync(0),
       blob_file_size(256 * 1024 * 1024),
-      num_concurrent_simple_blobs(4),
+      num_concurrent_simple_blobs(1),
       default_ttl_extractor(false),
       compression(kNoCompression) {}
 
