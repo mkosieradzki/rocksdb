@@ -941,6 +941,35 @@ extern ROCKSDB_LIBRARY_API rocksdb_ratelimiter_t* rocksdb_ratelimiter_create(
     int64_t rate_bytes_per_sec, int64_t refill_period_us, int32_t fairness);
 extern ROCKSDB_LIBRARY_API void rocksdb_ratelimiter_destroy(rocksdb_ratelimiter_t*);
 
+/* Replication */
+extern ROCKSDB_LIBRARY_API uint64_t rocksdb_get_latest_sequence_number(
+    rocksdb_t* db);
+extern ROCKSDB_LIBRARY_API void rocksdb_disable_file_deletions(rocksdb_t* db,
+    char** errptr);
+extern ROCKSDB_LIBRARY_API void rocksdb_enable_file_deletions(rocksdb_t* db,
+    unsigned char force, char** errptr);
+extern ROCKSDB_LIBRARY_API rocksdb_transactionlog_iterator_readoptions_t*
+rocksdb_transactionlog_iterator_readoptions_create();
+extern ROCKSDB_LIBRARY_API void 
+rocksdb_transactionlog_iterator_readoptions_destroy(
+    rocksdb_transactionlog_iterator_readoptions_t* opt);
+extern ROCKSDB_LIBRARY_API rocksdb_transactionlog_iterator_t*
+rocksdb_get_updates_since(rocksdb_t* db, uint64_t sequence_num,
+    rocksdb_transactionlog_iterator_t* iterator,
+    const rocksdb_transactionlog_iterator_readoptions_t* read_options,
+    char** errptr);
+extern ROCKSDB_LIBRARY_API void rocksb_transactionlog_iter_destroy(
+    rocksdb_transactionlog_iterator_t* iterator);
+extern ROCKSDB_LIBRARY_API void rocksdb_transactionlog_iter_next(
+    rocksdb_transactionlog_iterator_t* iterator);
+extern ROCKSDB_LIBRARY_API unsigned char rocksdb_transactionlog_iter_is_valid(
+    rocksdb_transactionlog_iterator_t* iterator);
+extern ROCKSDB_LIBRARY_API void rocksdb_transactionlog_iter_get_error(
+    rocksdb_transactionlog_iterator_t* iterator, char** errptr);
+extern ROCKSDB_LIBRARY_API void rocksdb_transactionlog_iter_get_batch(
+	rocksdb_transactionlog_iterator_t* iterator, uint64_t* seq,
+	rocksdb_writebatch_t** write_batch);
+
 /* Compaction Filter */
 
 extern ROCKSDB_LIBRARY_API rocksdb_compactionfilter_t*
