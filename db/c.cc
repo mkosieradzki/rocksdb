@@ -2515,15 +2515,6 @@ uint64_t rocksdb_get_latest_sequence_number(rocksdb_t* db){
   return db->rep->GetLatestSequenceNumber();
 }
 
-void rocksdb_disable_file_deletions(rocksdb_t* db, char** errptr){
-  SaveError(errptr, db->rep->DisableFileDeletions());
-}
-
-void rocksdb_enable_file_deletions(rocksdb_t* db, unsigned char force,
-    char** errptr){
-  SaveError(errptr, db->rep->EnableFileDeletions(force));
-}
-
 rocksdb_transactionlog_iterator_readoptions_t*
 rocksdb_transactionlog_iterator_readoptions_create(){
     return new rocksdb_transactionlog_iterator_readoptions_t();

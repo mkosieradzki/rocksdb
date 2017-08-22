@@ -946,10 +946,6 @@ extern ROCKSDB_LIBRARY_API void rocksdb_ratelimiter_destroy(rocksdb_ratelimiter_
 /* Replication */
 extern ROCKSDB_LIBRARY_API uint64_t rocksdb_get_latest_sequence_number(
     rocksdb_t* db);
-extern ROCKSDB_LIBRARY_API void rocksdb_disable_file_deletions(rocksdb_t* db,
-    char** errptr);
-extern ROCKSDB_LIBRARY_API void rocksdb_enable_file_deletions(rocksdb_t* db,
-    unsigned char force, char** errptr);
 extern ROCKSDB_LIBRARY_API rocksdb_transactionlog_iterator_readoptions_t*
 rocksdb_transactionlog_iterator_readoptions_create();
 extern ROCKSDB_LIBRARY_API void 
