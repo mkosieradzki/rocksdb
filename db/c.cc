@@ -111,7 +111,7 @@ struct rocksdb_backup_engine_t   { BackupEngine*     rep; };
 struct rocksdb_backup_engine_info_t { std::vector<BackupInfo> rep; };
 struct rocksdb_restore_options_t { RestoreOptions rep; };
 struct rocksdb_iterator_t        { Iterator*         rep; };
-struct rocksdb_transactionlog_iterator_t { TransactionLogIterator* rep; };
+struct rocksdb_transactionlog_iterator_t { std::unique_ptr<TransactionLogIterator> rep; };
 struct rocksdb_transactionlog_iterator_readoptions_t { TransactionLogIterator::ReadOptions rep; };
 struct rocksdb_writebatch_t      { WriteBatch        rep; };
 struct rocksdb_writebatch_wi_t   { WriteBatchWithIndex* rep; };
@@ -2517,13 +2517,12 @@ rocksdb_transactionlog_iterator_t* rocksdb_get_updates_since(rocksdb_t* db,
     return nullptr;
   }
   iterator = new rocksdb_transactionlog_iterator_t();
-  iterator->rep = iter.release();
+  iterator->rep = std::move(iter);
   return iterator;
 }
 
 void rocksb_transactionlog_iter_destroy(
     rocksdb_transactionlog_iterator_t* iterator){
-  delete iterator->rep;
   delete iterator;
 }
 
