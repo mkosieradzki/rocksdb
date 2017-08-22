@@ -88,6 +88,8 @@ typedef struct rocksdb_filelock_t        rocksdb_filelock_t;
 typedef struct rocksdb_filterpolicy_t    rocksdb_filterpolicy_t;
 typedef struct rocksdb_flushoptions_t    rocksdb_flushoptions_t;
 typedef struct rocksdb_iterator_t        rocksdb_iterator_t;
+typedef struct rocksdb_transactionlog_iterator_t rocksdb_transactionlog_iterator_t;
+typedef struct rocksdb_transactionlog_iterator_readoptions_t rocksdb_transactionlog_iterator_readoptions_t;
 typedef struct rocksdb_logger_t          rocksdb_logger_t;
 typedef struct rocksdb_mergeoperator_t   rocksdb_mergeoperator_t;
 typedef struct rocksdb_options_t         rocksdb_options_t;
